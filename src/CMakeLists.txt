@@ -5,6 +5,8 @@ add_library(ll_core STATIC
   core/lecture_splitter.cpp
   core/chunker.cpp
   core/cer.cpp
+  core/rrf.cpp
+  embed/pooling.cpp
   ocr/ctc.cpp
   ocr/layout.cpp
 )
@@ -50,4 +52,23 @@ if(LL_ENABLE_ORT)
 
   add_executable(ll-ocr apps/ll_ocr.cpp)
   target_link_libraries(ll-ocr PRIVATE ll_ocr ll_pdf ll_storage)
+
+  add_library(ll_search STATIC
+    embed/text_embedder.cpp
+    vector/qdrant_client.cpp
+    index/outbox_indexer.cpp
+    search/hybrid_search.cpp
+  )
+  target_include_directories(ll_search PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(ll_search PUBLIC ll_core ll_inference sentencepiece::sentencepiece PkgConfig::HTTPLIB
+                        PkgConfig::LIBPQXX nlohmann_json::nlohmann_json)
+
+  add_executable(ll-indexer apps/ll_indexer.cpp)
+  target_link_libraries(ll-indexer PRIVATE ll_search ll_storage)
+
+  add_executable(ll-search apps/ll_search.cpp)
+  target_link_libraries(ll-search PRIVATE ll_search ll_storage)
+
+  add_executable(ll-api apps/ll_api.cpp)
+  target_link_libraries(ll-api PRIVATE ll_search ll_storage)
 endif()

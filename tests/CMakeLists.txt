@@ -5,6 +5,7 @@ add_executable(ll_tests
   lecture_splitter_test.cpp
   chunker_test.cpp
   ocr_core_test.cpp
+  search_core_test.cpp
 )
 target_link_libraries(ll_tests PRIVATE ll_core GTest::gtest_main)
 

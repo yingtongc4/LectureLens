@@ -1,0 +1,8 @@
+build/
+out/
+.vscode/
+.env
+# Course material is copyrighted: never commit it.
+data/private/
+models/
+bench/results/*.local.*

@@ -1,0 +1,31 @@
+name: lecturelens
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lecturelens
+      POSTGRES_PASSWORD: lecturelens   # local dev only
+      POSTGRES_DB: lecturelens
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lecturelens"]
+      interval: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"   # REST
+      - "127.0.0.1:6334:6334"   # gRPC
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+volumes:
+  pgdata:
+  qdrantdata:

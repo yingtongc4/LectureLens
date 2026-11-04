@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "inference/ort_model.hpp"
+#include "inference/model.hpp"
 
 namespace sentencepiece {
 class SentencePieceProcessor;
@@ -17,8 +17,10 @@ namespace ll::embed {
 // E5 expects a "query: " or "passage: " prefix; use embed_query / embed_passages.
 class TextEmbedder {
 public:
-    // `dir` holds model.onnx and sentencepiece.bpe.model.
-    TextEmbedder(const std::filesystem::path& dir, Backend backend, int threads = 0, int max_tokens = 512);
+    // `dir` holds the ONNX model (model.onnx, or a variant such as
+    // model_int8.onnx) and sentencepiece.bpe.model.
+    TextEmbedder(const std::filesystem::path& dir, Backend backend, int threads = 0,
+                 const std::string& model_file = "model.onnx", int max_tokens = 512);
     ~TextEmbedder();
 
     std::vector<float> embed_query(const std::string& text) const;
@@ -33,7 +35,7 @@ private:
     std::vector<std::vector<float>> embed(const std::vector<std::string>& texts) const;
 
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_;
-    std::unique_ptr<OrtModel> model_;
+    std::unique_ptr<Model> model_;
     bool has_token_type_ids_ = false;
     int max_tokens_;
     int dim_ = 0;

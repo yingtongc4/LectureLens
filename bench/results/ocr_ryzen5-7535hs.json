@@ -1,0 +1,29 @@
+{
+  "cpu": "AMD Ryzen 5 7535HS with Radeon Graphics",
+  "command": "ll-ocr --backend NAME --every 5 eval",
+  "pages": 104,
+  "dpi": 144,
+  "limit_side": 960,
+  "runs": [
+    {
+      "backend": "cpu (ONNX Runtime 1.31.0)",
+      "det_ms": {"mean": 197.3, "p50": 184.6, "p95": 286.9},
+      "rec_ms": {"mean": 1215.2, "p50": 1017.9, "p95": 2826.8},
+      "render_ms_p50": 462.0,
+      "pages_per_s": 0.514,
+      "recall_micro": 0.9529,
+      "cer_clean_p50": 0.0167,
+      "cer_clean_micro": 0.0947
+    },
+    {
+      "backend": "openvino (OpenVINO 2026.3.1, CPU plugin)",
+      "det_ms": {"mean": 86.1, "p50": 85.9, "p95": 119.9},
+      "rec_ms": {"mean": 464.1, "p50": 427.0, "p95": 786.7},
+      "render_ms_p50": 444.4,
+      "pages_per_s": 0.951,
+      "recall_micro": 0.9529,
+      "cer_clean_p50": 0.0167,
+      "cer_clean_micro": 0.0947
+    }
+  ]
+}

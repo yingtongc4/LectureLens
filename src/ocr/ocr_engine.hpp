@@ -6,7 +6,7 @@
 
 #include <opencv2/core.hpp>
 
-#include "inference/ort_model.hpp"
+#include "inference/model.hpp"
 #include "ocr/layout.hpp"
 #include "ocr/text_detector.hpp"
 #include "ocr/text_recognizer.hpp"
@@ -33,8 +33,8 @@ public:
 
 private:
     OcrOptions opts_;
-    std::unique_ptr<OrtModel> det_model_;
-    std::unique_ptr<OrtModel> rec_model_;
+    std::unique_ptr<Model> det_model_;
+    std::unique_ptr<Model> rec_model_;
     std::unique_ptr<TextDetector> detector_;
     std::unique_ptr<TextRecognizer> recognizer_;
 };

@@ -55,7 +55,7 @@ float box_score(const cv::Mat& prob, const std::array<cv::Point2f, 4>& pts) {
 
 }  // namespace
 
-TextDetector::TextDetector(const OrtModel& model, DetectorOptions opts) : model_(model), opts_(opts) {}
+TextDetector::TextDetector(const Model& model, DetectorOptions opts) : model_(model), opts_(opts) {}
 
 std::vector<TextBox> TextDetector::detect(const cv::Mat& bgr) const {
     const double scale = std::min(1.0, static_cast<double>(opts_.limit_side) / std::max(bgr.cols, bgr.rows));

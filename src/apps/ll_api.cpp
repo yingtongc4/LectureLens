@@ -25,16 +25,20 @@ void reply_json(httplib::Response& res, const nlohmann::json& body, int status =
 
 int main(int argc, char** argv) {
     int port = 8080;
-    std::filesystem::path models = "models";
+    std::filesystem::path models = ll::default_models_dir();
+    ll::Backend backend = ll::Backend::Cpu;
+    std::string model_file = "model.onnx";  // must match what ll-indexer used
     for (int i = 1; i + 1 < argc; i += 2) {
         const std::string s = argv[i];
         if (s == "--port") port = std::stoi(argv[i + 1]);
         else if (s == "--models") models = argv[i + 1];
+        else if (s == "--backend") backend = ll::parse_backend(argv[i + 1]);
+        else if (s == "--model-file") model_file = argv[i + 1];
     }
 
     try {
         const auto dsn = ll::pg_dsn_from_env();
-        const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", ll::Backend::Cpu);
+        const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", backend, 0, model_file);
         const auto qdrant_url = ll::vec::qdrant_url_from_env();
 
         httplib::Server server;

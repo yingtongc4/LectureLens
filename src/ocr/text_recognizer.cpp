@@ -9,7 +9,7 @@
 
 namespace ll::ocr {
 
-TextRecognizer::TextRecognizer(const OrtModel& model, RecognizerOptions opts)
+TextRecognizer::TextRecognizer(const Model& model, RecognizerOptions opts)
     : model_(model), opts_(opts) {
     const auto charset = model_.metadata("character");
     if (!charset) throw std::runtime_error("recognition model has no 'character' metadata");

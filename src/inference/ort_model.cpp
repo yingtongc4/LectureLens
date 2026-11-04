@@ -4,7 +4,6 @@
 
 #include <sstream>
 #include <stdexcept>
-#include <unordered_map>
 
 namespace ll {
 namespace {
@@ -28,11 +27,8 @@ void add_execution_provider(Ort::SessionOptions& opts, Backend backend) {
     switch (backend) {
         case Backend::Cpu:
             return;
-        case Backend::OpenVino: {
-            std::unordered_map<std::string, std::string> ov{{"device_type", "CPU"}};
-            opts.AppendExecutionProvider_OpenVINO_V2(ov);
-            return;
-        }
+        case Backend::OpenVino:
+            throw std::logic_error("OpenVINO runs through OvModel, not an ORT provider");
         case Backend::Cuda: {
             OrtCUDAProviderOptions cuda{};
             opts.AppendExecutionProvider_CUDA(cuda);
@@ -47,24 +43,6 @@ void add_execution_provider(Ort::SessionOptions& opts, Backend backend) {
 }
 
 }  // namespace
-
-Backend parse_backend(std::string_view name) {
-    if (name == "cpu") return Backend::Cpu;
-    if (name == "openvino") return Backend::OpenVino;
-    if (name == "cuda") return Backend::Cuda;
-    if (name == "tensorrt") return Backend::TensorRt;
-    throw std::invalid_argument("unknown backend: " + std::string(name));
-}
-
-std::string backend_name(Backend b) {
-    switch (b) {
-        case Backend::Cpu: return "cpu";
-        case Backend::OpenVino: return "openvino";
-        case Backend::Cuda: return "cuda";
-        case Backend::TensorRt: return "tensorrt";
-    }
-    return "unknown";
-}
 
 struct OrtModel::Impl {
     Ort::Session session{nullptr};

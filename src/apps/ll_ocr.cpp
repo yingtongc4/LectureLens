@@ -6,7 +6,7 @@
 //   ll-ocr [options] eval                 OCR pages that have a good text layer
 //                                         and report CER against it
 // options:
-//   --models DIR      model directory (default ./models)
+//   --models DIR      model directory (default $LL_MODELS_DIR or ~/.local/share/lecturelens/models)
 //   --backend NAME    cpu | openvino | cuda | tensorrt (default cpu)
 //   --threads N       ORT intra-op threads (default: ORT decides)
 //   --dpi N           render resolution (default 144)
@@ -45,7 +45,7 @@ constexpr double kExtraTextRatio = 1.2;
 struct Args {
     std::string mode;
     std::vector<std::string> positional;
-    std::filesystem::path models = "models";
+    std::filesystem::path models = ll::default_models_dir();
     ll::Backend backend = ll::Backend::Cpu;
     int threads = 0;
     double dpi = 144;

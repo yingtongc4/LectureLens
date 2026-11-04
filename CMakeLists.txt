@@ -49,6 +49,16 @@ if(LL_ENABLE_ORT)
   pkg_check_modules(HTTPLIB REQUIRED IMPORTED_TARGET cpp-httplib)
 endif()
 
+if(LL_ENABLE_OPENVINO)
+  if(NOT LL_ENABLE_ORT)
+    message(FATAL_ERROR "LL_ENABLE_OPENVINO needs LL_ENABLE_ORT (shared OCR/embedding code)")
+  endif()
+  # Release archive unpacked to ~/opt by scripts/fetch_models.sh.
+  set(OPENVINO_ROOT "$ENV{HOME}/opt/openvino_2026.3.1" CACHE PATH "OpenVINO install dir")
+  find_package(OpenVINO REQUIRED COMPONENTS Runtime ONNX HINTS "${OPENVINO_ROOT}/runtime/cmake")
+  list(APPEND CMAKE_BUILD_RPATH "${OPENVINO_ROOT}/runtime/lib/intel64" "${OPENVINO_ROOT}/runtime/3rdparty/tbb/lib")
+endif()
+
 add_subdirectory(src)
 
 if(LL_BUILD_TESTS)

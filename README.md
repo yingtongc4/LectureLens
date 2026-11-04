@@ -20,27 +20,41 @@ PDF ──► ll-ingest ──► PostgreSQL (documents, lectures, pages, chunks
 |---|---|
 | `src/pdf` | poppler-cpp wrapper: text layer and page rendering |
 | `src/core` | UTF-8, slide-text normalization, lecture splitting, chunking, CER/LCS, RRF |
-| `src/inference` | ONNX Runtime wrapper; one switch point for CPU / OpenVINO / CUDA / TensorRT |
+| `src/inference` | `Model` interface: ONNX Runtime (CPU / CUDA / TensorRT providers) and native OpenVINO, chosen by `--backend` |
 | `src/ocr` | DBNet detection post-processing, CTC recognition, reading order |
 | `src/embed` | XLM-R SentencePiece tokenization, mean pooling, E5 query/passage prefixes |
 | `src/vector` | Qdrant REST client |
 | `src/index` | Transactional-outbox indexer: `FOR UPDATE SKIP LOCKED`, idempotent upserts, backoff, dead-letter |
 | `src/search` | Hybrid retrieval: vector + full-text, Reciprocal Rank Fusion, per-page dedup |
-| `src/apps` | `ll-ingest`, `ll-ocr`, `ll-indexer`, `ll-search`, `ll-api`, `ll-model-info` |
+| `src/apps` | `ll-ingest`, `ll-ocr`, `ll-indexer`, `ll-search`, `ll-api`, `ll-bench`, `ll-model-info` |
 | `migrations` | Schema, applied by `scripts/migrate.sh` |
 | `eval` | Labeled retrieval queries |
+| `bench/results` | Benchmark output (JSON) |
 
 ## Running (Ubuntu 24.04 / WSL2)
 
 ```bash
 bash scripts/setup_wsl.sh        # once: compilers, libraries, Docker (asks for sudo)
 sudo apt-get install -y libsentencepiece-dev
-bash scripts/fetch_models.sh     # ONNX Runtime, PP-OCRv4, multilingual-e5-small
-bash scripts/dev.sh test         # build + unit tests
+bash scripts/fetch_models.sh     # ONNX Runtime, OpenVINO, PP-OCRv4, multilingual-e5-small
+LL_CMAKE_ARGS=-DLL_ENABLE_OPENVINO=ON bash scripts/dev.sh test   # build + unit tests
 bash scripts/dev.sh ingest       # PostgreSQL + Qdrant up, migrate, ingest PDFs
-bash scripts/dev.sh ocr run      # OCR pages whose text layer is too thin
-~/build/lecturelens/src/ll-indexer --once --models models
-~/build/lecturelens/src/ll-api --models models     # http://127.0.0.1:8080
+bash scripts/dev.sh ocr --backend openvino run   # OCR pages whose text layer is too thin
+~/build/lecturelens/src/ll-indexer --once
+~/build/lecturelens/src/ll-api     # http://127.0.0.1:8080
+```
+
+Models are kept in `~/.local/share/lecturelens/models` (`LL_MODELS_DIR`), on
+the Linux filesystem: under WSL2, loading a 450 MB model from `/mnt/c` took
+21.7 s versus 3.0 s from ext4. Every tool takes `--backend cpu|openvino|cuda|tensorrt`.
+
+Benchmarks:
+
+```bash
+python3 -m venv ~/.venvs/ll-quant && ~/.venvs/ll-quant/bin/pip install onnxruntime onnx
+~/.venvs/ll-quant/bin/python -I scripts/quantize_e5.py ~/.local/share/lecturelens/models/multilingual-e5-small
+~/build/lecturelens/src/ll-bench embed --out bench/results/embed.json
+~/build/lecturelens/src/ll-ocr --backend openvino --every 5 eval
 ```
 
 ```bash
@@ -83,6 +97,47 @@ first hybrid run from 63.3% to 76.7% Recall@5: OR-ing query lexemes (a full
 question never has every term on one slide), one result per page, and
 excluding cover/outline slides. The query set is small and was written by the
 author, so treat these numbers as indicative.
+
+**Inference backends** (same ONNX files, same pre/post-processing; only the
+runtime changes; `bench/results/`)
+
+OCR, 104 pages:
+
+| | ONNX Runtime CPU | OpenVINO CPU | |
+|---|---|---|---|
+| Detection p50 / p95 | 185 / 287 ms | 86 / 120 ms | 2.1× |
+| Recognition p50 / p95 | 1018 / 2827 ms | 427 / 787 ms | 2.4× (p95 3.6×) |
+| Pages / s (incl. rendering) | 0.51 | 0.95 | 1.9× |
+| Recall / clean-page CER | 95.3% / 1.7% | 95.3% / 1.7% | identical |
+
+PP-OCR feeds every page and every text-line batch at a different size;
+OpenVINO handles these dynamic shapes much better here. Rendering (~450 ms
+per page) is now the largest share of OCR time.
+
+Embeddings, 646 passages and 30 queries (cosine is against the ORT FP32
+embedding of the same text; retrieval is vector-only, exact search):
+
+| Variant | Size | Passages / s | Query p50 | Cosine (mean / min) | Recall@5 | Recall@10 |
+|---|---|---|---|---|---|---|
+| ORT FP32 | 449 MB | 22–31 | 7.1 ms | 1 | 63.3% | 76.7% |
+| OpenVINO FP32 | 449 MB | 24 | 8.1 ms | 1.0000 / 1.0000 | 63.3% | 76.7% |
+| ORT INT8 (dynamic) | 113 MB | 32–41 | 4.9 ms | 0.9959 / 0.9891 | 66.7% | 70.0% |
+| OpenVINO + the same INT8 file | 113 MB | 15 | 15.6 ms | 0.9966 / 0.9906 | 63.3% | 73.3% |
+
+- For the encoder, FP32 throughput on the two runtimes is within run-to-run
+  noise on this laptop (ORT ranged from 22 to 31 passages/s across runs).
+  OpenVINO loads faster from its compiled-model cache (1.2 s vs 3.7–4.2 s).
+- Dynamic INT8 quantization is 4× smaller and about 1.4× faster on ONNX
+  Runtime. Embeddings stay at cosine 0.996, but Recall@10 drops from 23/30 to
+  21/30 queries: worth measuring before switching, not a free win.
+- The INT8 file uses ORT's `MatMulInteger` format, which OpenVINO runs slower
+  than FP32. OpenVINO's own path (NNCF weight compression) is the fair
+  comparison and is not done yet.
+- An AMD CPU has none of the Intel-specific paths (AMX, VNNI on recent Xeons
+  and Core Ultra). The same `ll-bench` run on an Intel machine is still to come.
+
+Hybrid search through OpenVINO gives the same results as through ONNX
+Runtime (Recall@5 76.7%, MRR 0.589).
 
 **API**: 50 searches at concurrency 8: all 200, p50 109 ms, p95 191 ms, 52 req/s.
 

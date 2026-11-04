@@ -4,7 +4,7 @@
 
 #include <opencv2/core.hpp>
 
-#include "inference/ort_model.hpp"
+#include "inference/model.hpp"
 #include "ocr/ctc.hpp"
 
 namespace ll::ocr {
@@ -19,7 +19,7 @@ struct RecognizerOptions {
 class TextRecognizer {
 public:
     // Reads the character set from the model's "character" metadata.
-    TextRecognizer(const OrtModel& model, RecognizerOptions opts = {});
+    TextRecognizer(const Model& model, RecognizerOptions opts = {});
 
     // Recognizes each crop; output order matches input order.
     std::vector<Decoded> recognize(const std::vector<cv::Mat>& crops) const;
@@ -27,7 +27,7 @@ public:
     std::size_t label_count() const { return labels_.size(); }
 
 private:
-    const OrtModel& model_;
+    const Model& model_;
     RecognizerOptions opts_;
     std::vector<std::string> labels_;
 };

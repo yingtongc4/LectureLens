@@ -5,9 +5,9 @@
 
 namespace ll {
 
-// Where a model runs. All backends go through ONNX Runtime execution
-// providers, so the same .onnx file and the same pre/post-processing code are
-// used everywhere and only the provider changes.
+// Where a model runs. Cpu, Cuda and TensorRt are ONNX Runtime execution
+// providers; OpenVino is the native OpenVINO runtime reading the same .onnx
+// file. Pre/post-processing code is shared by all of them.
 enum class Backend { Cpu, OpenVino, Cuda, TensorRt };
 
 Backend parse_backend(std::string_view name);  // "cpu", "openvino", "cuda", "tensorrt"

@@ -34,7 +34,7 @@ case "${1:-build}" in
   down)     "${COMPOSE[@]}" down ;;
   reset-db) "${COMPOSE[@]}" down -v; up ;;
   ingest)   build; up; "$BUILD/src/ll-ingest" "${@:2}" "$COURSE_DIR"/*.pdf ;;
-  ocr)      build; up; "$BUILD/src/ll-ocr" --models "$SRC/models" "${@:2}" ;;
+  ocr)      build; up; "$BUILD/src/ll-ocr" "${@:2}" ;;
   psql)     "${COMPOSE[@]}" exec postgres psql -U lecturelens lecturelens ;;
   *)        sed -n '2,14p' "$0"; exit 2 ;;
 esac

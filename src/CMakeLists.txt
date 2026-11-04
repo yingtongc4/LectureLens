@@ -35,9 +35,14 @@ add_executable(ll-ingest apps/ll_ingest.cpp)
 target_link_libraries(ll-ingest PRIVATE ll_ingest)
 
 if(LL_ENABLE_ORT)
-  add_library(ll_inference STATIC inference/ort_model.cpp)
+  add_library(ll_inference STATIC inference/model.cpp inference/ort_model.cpp)
   target_include_directories(ll_inference PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(ll_inference PUBLIC onnxruntime::onnxruntime)
+  if(LL_ENABLE_OPENVINO)
+    target_sources(ll_inference PRIVATE inference/ov_model.cpp)
+    target_compile_definitions(ll_inference PRIVATE LL_HAVE_OPENVINO)
+    target_link_libraries(ll_inference PUBLIC openvino::runtime)
+  endif()
 
   add_library(ll_ocr STATIC
     ocr/text_detector.cpp
@@ -71,4 +76,7 @@ if(LL_ENABLE_ORT)
 
   add_executable(ll-api apps/ll_api.cpp)
   target_link_libraries(ll-api PRIVATE ll_search ll_storage)
+
+  add_executable(ll-bench apps/ll_bench.cpp)
+  target_link_libraries(ll-bench PRIVATE ll_search ll_storage)
 endif()

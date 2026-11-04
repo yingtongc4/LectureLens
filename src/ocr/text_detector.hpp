@@ -5,7 +5,7 @@
 
 #include <opencv2/core.hpp>
 
-#include "inference/ort_model.hpp"
+#include "inference/model.hpp"
 
 namespace ll::ocr {
 
@@ -26,11 +26,11 @@ struct DetectorOptions {
 // PP-OCR DBNet text detector: image -> probability map -> rotated boxes.
 class TextDetector {
 public:
-    TextDetector(const OrtModel& model, DetectorOptions opts = {});
+    TextDetector(const Model& model, DetectorOptions opts = {});
     std::vector<TextBox> detect(const cv::Mat& bgr) const;
 
 private:
-    const OrtModel& model_;
+    const Model& model_;
     DetectorOptions opts_;
 };
 

@@ -27,8 +27,8 @@ Box bounding_box(const TextBox& b) {
 
 OcrEngine::OcrEngine(const std::filesystem::path& models_dir, Backend backend, int threads, OcrOptions opts)
     : opts_(opts),
-      det_model_(std::make_unique<OrtModel>(models_dir / "ch_PP-OCRv4_det_infer.onnx", backend, threads)),
-      rec_model_(std::make_unique<OrtModel>(models_dir / "ch_PP-OCRv4_rec_infer.onnx", backend, threads)),
+      det_model_(load_model(models_dir / "ch_PP-OCRv4_det_infer.onnx", backend, threads)),
+      rec_model_(load_model(models_dir / "ch_PP-OCRv4_rec_infer.onnx", backend, threads)),
       detector_(std::make_unique<TextDetector>(*det_model_, opts_.det)),
       recognizer_(std::make_unique<TextRecognizer>(*rec_model_, opts_.rec)) {}
 

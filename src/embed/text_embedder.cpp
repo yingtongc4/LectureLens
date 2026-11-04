@@ -16,9 +16,10 @@ constexpr std::int64_t kBos = 0, kPad = 1, kEos = 2, kUnk = 3, kFairseqOffset = 
 
 }  // namespace
 
-TextEmbedder::TextEmbedder(const std::filesystem::path& dir, Backend backend, int threads, int max_tokens)
+TextEmbedder::TextEmbedder(const std::filesystem::path& dir, Backend backend, int threads,
+                           const std::string& model_file, int max_tokens)
     : sp_(std::make_unique<sentencepiece::SentencePieceProcessor>()),
-      model_(std::make_unique<OrtModel>(dir / "model.onnx", backend, threads)),
+      model_(load_model(dir / model_file, backend, threads)),
       max_tokens_(max_tokens) {
     const auto status = sp_->Load((dir / "sentencepiece.bpe.model").string());
     if (!status.ok()) throw std::runtime_error("cannot load tokenizer: " + status.ToString());

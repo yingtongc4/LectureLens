@@ -1,6 +1,6 @@
 // ll-indexer: sync chunks from PostgreSQL to Qdrant via the transactional outbox.
 //
-//   ll-indexer [--once] [--batch N] [--threads N] [--models DIR]
+//   ll-indexer [--once] [--batch N] [--threads N] [--models DIR] [--backend NAME] [--model-file F]
 //
 // --once drains the backlog and exits; otherwise it polls every 2 s.
 
@@ -23,7 +23,9 @@ std::atomic<bool> g_stop{false};
 int main(int argc, char** argv) {
     bool once = false;
     int threads = 0;
-    std::filesystem::path models = "models";
+    std::filesystem::path models = ll::default_models_dir();
+    ll::Backend backend = ll::Backend::Cpu;
+    std::string model_file = "model.onnx";
     ll::index::IndexerOptions opts;
     opts.dsn = ll::pg_dsn_from_env();
 
@@ -33,8 +35,11 @@ int main(int argc, char** argv) {
         else if (s == "--batch" && i + 1 < argc) opts.batch_size = std::stoi(argv[++i]);
         else if (s == "--threads" && i + 1 < argc) threads = std::stoi(argv[++i]);
         else if (s == "--models" && i + 1 < argc) models = argv[++i];
+        else if (s == "--backend" && i + 1 < argc) backend = ll::parse_backend(argv[++i]);
+        else if (s == "--model-file" && i + 1 < argc) model_file = argv[++i];
         else {
-            std::cerr << "usage: ll-indexer [--once] [--batch N] [--threads N] [--models DIR]\n";
+            std::cerr << "usage: ll-indexer [--once] [--batch N] [--threads N] [--models DIR]\n"
+                         "                  [--backend NAME] [--model-file FILE]\n";
             return 2;
         }
     }
@@ -42,7 +47,7 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, [](int) { g_stop = true; });
 
     try {
-        const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", ll::Backend::Cpu, threads);
+        const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", backend, threads, model_file);
         ll::vec::QdrantClient qdrant(ll::vec::qdrant_url_from_env());
         ll::index::OutboxIndexer indexer(opts, embedder, qdrant);
         indexer.ensure_collection();

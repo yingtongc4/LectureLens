@@ -2,6 +2,7 @@
 //
 //   ll-search [--mode hybrid|vector|keyword] [-k N] "QUERY"
 //   ll-search eval FILE.jsonl [-k N]
+// common: [--models DIR] [--backend cpu|openvino|...] [--model-file FILE]
 //
 // Eval file: one JSON object per line,
 //   {"query": "...", "lecture": "Web security (II)", "pages": [148, 149, 150]}
@@ -83,12 +84,16 @@ int run_eval(ll::search::HybridSearcher& searcher, const std::string& file, int 
 int main(int argc, char** argv) {
     std::string mode = "hybrid", query, eval_file;
     int k = 5;
-    std::filesystem::path models = "models";
+    std::filesystem::path models = ll::default_models_dir();
+    ll::Backend backend = ll::Backend::Cpu;
+    std::string model_file = "model.onnx";  // must match what ll-indexer used
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
         if (s == "--mode" && i + 1 < argc) mode = argv[++i];
         else if (s == "-k" && i + 1 < argc) k = std::stoi(argv[++i]);
         else if (s == "--models" && i + 1 < argc) models = argv[++i];
+        else if (s == "--backend" && i + 1 < argc) backend = ll::parse_backend(argv[++i]);
+        else if (s == "--model-file" && i + 1 < argc) model_file = argv[++i];
         else if (s == "eval" && i + 1 < argc) eval_file = argv[++i];
         else query = s;
     }
@@ -97,7 +102,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     try {
-        const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", ll::Backend::Cpu);
+        const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", backend, 0, model_file);
         ll::vec::QdrantClient qdrant(ll::vec::qdrant_url_from_env());
         ll::search::HybridSearcher searcher(ll::pg_dsn_from_env(), embedder, qdrant);
         if (!eval_file.empty()) return run_eval(searcher, eval_file, k);

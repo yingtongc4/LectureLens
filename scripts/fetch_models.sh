@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Downloads the CPU ONNX Runtime and the PP-OCRv4 ONNX models. Idempotent.
+# Downloads ONNX Runtime, OpenVINO and the ONNX models. Idempotent.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 ORT_VERSION="${ORT_VERSION:-1.31.0}"
 ORT_DIR="$HOME/opt/onnxruntime-linux-x64-$ORT_VERSION"
-MODELS="$SRC/models"
+# On the Linux filesystem: under WSL, loading models from /mnt/c is several times slower.
+MODELS="${LL_MODELS_DIR:-$HOME/.local/share/lecturelens/models}"
 HF="https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4"
 
 # Abort a transfer that stalls below 1 KB/s for 20 s, then resume it.
@@ -26,6 +27,19 @@ if [[ ! -d "$ORT_DIR" ]]; then
   rm "/tmp/ort-$ORT_VERSION.tgz"
 fi
 echo "ONNX Runtime: $ORT_DIR"
+
+# OpenVINO runtime for -DLL_ENABLE_OPENVINO=ON (C++ API + ONNX frontend).
+OV_VERSION="2026.3.1"
+OV_BUILD="$OV_VERSION.22476.56d9685302d"
+OV_DIR="$HOME/opt/openvino_$OV_VERSION"
+if [[ ! -d "$OV_DIR" ]]; then
+  tgz="openvino_toolkit_ubuntu24_${OV_BUILD}_x86_64.tgz"
+  fetch "/tmp/$tgz" "https://storage.openvinotoolkit.org/repositories/openvino/packages/$OV_VERSION/linux/$tgz"
+  tar -xzf "/tmp/$tgz" -C "$HOME/opt"
+  mv "$HOME/opt/${tgz%.tgz}" "$OV_DIR"
+  rm "/tmp/$tgz"
+fi
+echo "OpenVINO: $OV_DIR"
 
 mkdir -p "$MODELS"
 for f in ch_PP-OCRv4_det_infer.onnx ch_PP-OCRv4_rec_infer.onnx; do

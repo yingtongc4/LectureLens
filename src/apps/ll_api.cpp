@@ -12,6 +12,7 @@
 #include <pqxx/pqxx>
 
 #include "search/hybrid_search.hpp"
+#include "storage/page_view.hpp"
 #include "storage/pg.hpp"
 
 namespace {
@@ -83,26 +84,15 @@ int main(int argc, char** argv) {
 
         server.Get(R"(/api/pages/(\d+)/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
             pqxx::connection conn(dsn);
-            pqxx::work tx(conn);
-            const auto page = tx.exec_params(
-                "SELECT p.id, d.title, l.title, p.text_layer, p.needs_ocr FROM pages p "
-                "JOIN documents d ON d.id = p.document_id JOIN lectures l ON l.id = p.lecture_id "
-                "WHERE p.document_id = $1 AND p.page_no = $2",
-                std::stoll(req.matches[1]), std::stoi(req.matches[2]));
-            if (page.empty()) return reply_json(res, {{"error", "page not found"}}, 404);
-
-            const auto blocks = tx.exec_params(
-                "SELECT text, x, y, w, h FROM ocr_blocks WHERE page_id = $1 ORDER BY backend, line_no",
-                page[0][0].as<std::int64_t>());
+            pqxx::read_transaction tx(conn);
+            const auto page = ll::repo::get_page(tx, std::stoll(req.matches[1]), std::stoi(req.matches[2]));
+            if (!page) return reply_json(res, {{"error", "page not found"}}, 404);
             nlohmann::json ocr = nlohmann::json::array();
-            for (const auto& b : blocks) {
-                ocr.push_back({{"text", b[0].as<std::string>()},
-                               {"box", {b[1].as<int>(), b[2].as<int>(), b[3].as<int>(), b[4].as<int>()}}});
-            }
-            reply_json(res, {{"document", page[0][1].as<std::string>()},
-                             {"lecture", page[0][2].as<std::string>()},
-                             {"text_layer", page[0][3].as<std::string>()},
-                             {"needs_ocr", page[0][4].as<bool>()},
+            for (const auto& l : page->ocr_lines) ocr.push_back({{"text", l.text}, {"box", {l.x, l.y, l.w, l.h}}});
+            reply_json(res, {{"document", page->document},
+                             {"lecture", page->lecture},
+                             {"text_layer", page->text_layer},
+                             {"needs_ocr", page->needs_ocr},
                              {"ocr_lines", ocr}});
         });
 

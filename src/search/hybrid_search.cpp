@@ -87,7 +87,7 @@ std::vector<Result> HybridSearcher::search(const Query& q, Timings* timings) {
     // topic of their lecture but answer nothing, so they are excluded.
     const auto t0 = Clock::now();
     const auto rows = tx.exec_params(
-        "SELECT c.id, d.title, l.title, p.page_no, c.source, c.content, p.id "
+        "SELECT c.id, d.title, l.title, p.page_no, c.source, c.content, p.id, d.id "
         "FROM chunks c JOIN pages p ON p.id = c.page_id JOIN lectures l ON l.id = p.lecture_id "
         "JOIN documents d ON d.id = p.document_id "
         "WHERE c.id = ANY($1::bigint[]) AND p.page_no <> l.first_page "
@@ -107,8 +107,8 @@ std::vector<Result> HybridSearcher::search(const Query& q, Timings* timings) {
         if (it == by_id.end()) continue;  // filtered, or a stale vector point
         const auto& r = it->second;
         if (!seen_pages.insert(r[6].as<std::int64_t>()).second) continue;
-        results.push_back({f.id, f.score, f.rank_a, f.rank_b, r[1].as<std::string>(), r[2].as<std::string>(),
-                           r[3].as<int>(), r[4].as<std::string>(), r[5].as<std::string>()});
+        results.push_back({f.id, f.score, r[7].as<std::int64_t>(), f.rank_a, f.rank_b, r[1].as<std::string>(),
+                           r[2].as<std::string>(), r[3].as<int>(), r[4].as<std::string>(), r[5].as<std::string>()});
     }
     if (timings) *timings = t;
     return results;
@@ -116,7 +116,8 @@ std::vector<Result> HybridSearcher::search(const Query& q, Timings* timings) {
 
 nlohmann::json to_json(const Result& r) {
     return {{"chunk_id", r.chunk_id},       {"score", r.score},     {"vector_rank", r.vector_rank},
-            {"keyword_rank", r.keyword_rank}, {"document", r.document}, {"lecture", r.lecture},
+            {"keyword_rank", r.keyword_rank}, {"document_id", r.document_id}, {"document", r.document},
+            {"lecture", r.lecture},
             {"page", r.page_no},            {"source", r.source},   {"content", r.content}};
 }
 

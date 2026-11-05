@@ -6,8 +6,10 @@ add_executable(ll_tests
   chunker_test.cpp
   ocr_core_test.cpp
   search_core_test.cpp
+  mcp_test.cpp
+  agent_test.cpp
 )
-target_link_libraries(ll_tests PRIVATE ll_core GTest::gtest_main)
+target_link_libraries(ll_tests PRIVATE ll_core ll_mcp GTest::gtest_main)
 
 include(GoogleTest)
 gtest_discover_tests(ll_tests)

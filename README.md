@@ -12,6 +12,8 @@ PDF ──► ll-ingest ──► PostgreSQL (documents, lectures, pages, chunks
         (ONNX Runtime)                                                          │
                                                                                 ▼
                          ll-api / ll-search ◄── RRF( Qdrant vectors , PostgreSQL full-text )
+                                   ▲
+              Claude ◄── ll-agent ─┴─ MCP (stdio) ── ll-mcp: search_lectures, get_page, list_lectures
 ```
 
 ## Components
@@ -26,7 +28,9 @@ PDF ──► ll-ingest ──► PostgreSQL (documents, lectures, pages, chunks
 | `src/vector` | Qdrant REST client |
 | `src/index` | Transactional-outbox indexer: `FOR UPDATE SKIP LOCKED`, idempotent upserts, backoff, dead-letter |
 | `src/search` | Hybrid retrieval: vector + full-text, Reciprocal Rank Fusion, per-page dedup |
-| `src/apps` | `ll-ingest`, `ll-ocr`, `ll-indexer`, `ll-search`, `ll-api`, `ll-bench`, `ll-model-info` |
+| `src/mcp` | Model Context Protocol server and client (JSON-RPC over stdio), both protocol eras |
+| `src/agent` | Tool-use loop over MCP tools; Claude Messages API client (raw HTTPS) |
+| `src/apps` | `ll-ingest`, `ll-ocr`, `ll-indexer`, `ll-search`, `ll-api`, `ll-mcp`, `ll-agent`, `ll-bench`, `ll-model-info` |
 | `migrations` | Schema, applied by `scripts/migrate.sh` |
 | `eval` | Labeled retrieval queries |
 | `bench/results` | Benchmark output (JSON) |
@@ -60,6 +64,21 @@ python3 -m venv ~/.venvs/ll-quant && ~/.venvs/ll-quant/bin/pip install onnxrunti
 ```bash
 curl -s -X POST localhost:8080/api/search -H 'Content-Type: application/json' \
   -d '{"query": "零知識證明是什麼", "top_k": 3}'
+```
+
+Agent and MCP:
+
+```bash
+export ANTHROPIC_API_KEY=...                       # ll-agent only
+~/build/lecturelens/src/ll-agent "SQL injection 的根本原因是什麼？要怎麼防禦？"
+~/build/lecturelens/src/ll-agent --list-tools      # MCP handshake + tools, no key needed
+python3 -I tests/e2e/mcp_smoke.py ~/build/lecturelens/src/ll-mcp
+```
+
+`ll-mcp` works with any MCP client. From Windows, through WSL:
+
+```json
+{"command": "wsl", "args": ["-d", "Ubuntu-24.04", "--", "/home/USER/build/lecturelens/src/ll-mcp"]}
 ```
 
 Course PDFs are copyrighted and are read from outside the repository
@@ -142,6 +161,44 @@ Runtime (Recall@5 76.7%, MRR 0.589).
 **API**: 50 searches at concurrency 8: all 200, p50 109 ms, p95 191 ms, 52 req/s.
 
 **Indexing**: 1,930 outbox events → 708 vectors in 31 s.
+
+## Agent and MCP
+
+`ll-mcp` exposes three read-only tools. Results carry both a readable text
+block and `structuredContent`; a bad argument or a missing page comes back as
+an `isError` result the model can read and correct, not as a protocol error.
+
+| Tool | Input | Returns |
+|---|---|---|
+| `search_lectures` | `query`, `top_k` (1-20), `mode`, `document_id` | Slides (one per page): lecture, page, document_id, snippet |
+| `get_page` | `document_id`, `page` | Slide text layer plus OCR text from images |
+| `list_lectures` | `document_id` (optional) | Lectures with page ranges |
+
+The protocol layer is written from the specification (no SDK) and serves both
+protocol eras on one stdio process:
+
+- **2026-07-28 (stateless):** version, client info and capabilities in every
+  request's `_meta`; `server/discover`; `UnsupportedProtocolVersionError`
+  (-32022) listing supported versions; cacheable `tools/list` (`ttlMs`,
+  `cacheScope`); `resultType` on results.
+- **2025-03-26 to 2025-11-25:** `initialize` handshake with version
+  negotiation.
+
+The client side follows the spec's stdio compatibility rule: probe with
+`server/discover`, retry on -32022 with a shared version, otherwise fall back
+to `initialize`. Unit tests run client against server in-process for every
+era combination, and `tests/e2e/mcp_smoke.py` checks the real server from a
+separate (Python) client.
+
+`ll-agent` launches `ll-mcp`, lists its tools, and runs Claude's tool-use loop:
+assistant content is sent back unchanged (thinking blocks included), all
+tool results of one turn go back in one user message, and the loop ends on
+`end_turn`, `refusal`, `max_tokens` or a turn limit. Requests use
+`claude-opus-5-5` at effort `medium`, API version `2026-10-21`, prompt caching
+of tools and system prompt, and `fallbacks: "default"` so a refused request is
+retried on a fallback model by the API (`--no-fallbacks` turns it off). The
+loop is tested with a scripted model; there is no official C++ SDK, so the
+client is raw HTTPS with retries on 408/409/429/5xx.
 
 ## Known issues
 

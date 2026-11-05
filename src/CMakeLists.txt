@@ -20,6 +20,7 @@ add_library(ll_storage STATIC
   storage/pg.cpp
   storage/document_repo.cpp
   storage/ocr_repo.cpp
+  storage/page_view.cpp
 )
 target_include_directories(ll_storage PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ll_storage PUBLIC ll_core PkgConfig::LIBPQXX nlohmann_json::nlohmann_json)
@@ -30,6 +31,16 @@ add_library(ll_ingest STATIC
 )
 target_include_directories(ll_ingest PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ll_ingest PUBLIC ll_core ll_pdf ll_storage OpenSSL::Crypto)
+
+# MCP server/client and the agent loop: JSON only, unit-tested without I/O.
+add_library(ll_mcp STATIC
+  mcp/schema.cpp
+  mcp/server.cpp
+  mcp/client.cpp
+  agent/agent.cpp
+)
+target_include_directories(ll_mcp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ll_mcp PUBLIC nlohmann_json::nlohmann_json)
 
 add_executable(ll-ingest apps/ll_ingest.cpp)
 target_link_libraries(ll-ingest PRIVATE ll_ingest)
@@ -79,4 +90,10 @@ if(LL_ENABLE_ORT)
 
   add_executable(ll-bench apps/ll_bench.cpp)
   target_link_libraries(ll-bench PRIVATE ll_search ll_storage)
+
+  add_executable(ll-mcp apps/ll_mcp.cpp)
+  target_link_libraries(ll-mcp PRIVATE ll_mcp ll_search ll_storage)
+
+  add_executable(ll-agent apps/ll_agent.cpp agent/claude_client.cpp)
+  target_link_libraries(ll-agent PRIVATE ll_mcp PkgConfig::HTTPLIB)
 endif()

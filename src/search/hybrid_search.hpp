@@ -26,6 +26,7 @@ struct Query {
 struct Result {
     std::int64_t chunk_id = 0;
     double score = 0.0;
+    std::int64_t document_id = 0;
     int vector_rank = 0;   // 0 = not retrieved by that retriever
     int keyword_rank = 0;
     std::string document;

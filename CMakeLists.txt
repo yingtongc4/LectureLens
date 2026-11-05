@@ -19,6 +19,8 @@ endif()
 add_compile_options(-Wall -Wextra -Wpedantic)
 if(LL_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  # GCC 13 reports false -Wmaybe-uninitialized inside libstdc++ <regex> under ASan.
+  add_compile_options(-Wno-maybe-uninitialized)
   add_link_options(-fsanitize=address,undefined)
 endif()
 
@@ -54,9 +56,9 @@ if(LL_ENABLE_OPENVINO)
     message(FATAL_ERROR "LL_ENABLE_OPENVINO needs LL_ENABLE_ORT (shared OCR/embedding code)")
   endif()
   # Release archive unpacked to ~/opt by scripts/fetch_models.sh.
-  set(OPENVINO_ROOT "$ENV{HOME}/opt/openvino_2026.3.1" CACHE PATH "OpenVINO install dir")
-  find_package(OpenVINO REQUIRED COMPONENTS Runtime ONNX HINTS "${OPENVINO_ROOT}/runtime/cmake")
-  list(APPEND CMAKE_BUILD_RPATH "${OPENVINO_ROOT}/runtime/lib/intel64" "${OPENVINO_ROOT}/runtime/3rdparty/tbb/lib")
+  set(LL_OPENVINO_DIR "$ENV{HOME}/opt/openvino_2026.3.1" CACHE PATH "OpenVINO install dir")
+  find_package(OpenVINO REQUIRED COMPONENTS Runtime ONNX HINTS "${LL_OPENVINO_DIR}/runtime/cmake")
+  list(APPEND CMAKE_BUILD_RPATH "${LL_OPENVINO_DIR}/runtime/lib/intel64" "${LL_OPENVINO_DIR}/runtime/3rdparty/tbb/lib")
 endif()
 
 add_subdirectory(src)

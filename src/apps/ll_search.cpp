@@ -120,6 +120,7 @@ int main(int argc, char** argv) {
                       << "   (rrf " << std::setprecision(4) << r.score << ", vec#" << r.vector_rank << ", kw#"
                       << r.keyword_rank << ")\n";
         }
+        if (!t.vector_error.empty()) std::cout << "degraded to keyword-only: " << t.vector_error << '\n';
         std::cout << std::setprecision(1) << std::fixed << "embed " << t.embed_ms << " ms, qdrant " << t.vector_ms
                   << " ms, fts " << t.keyword_ms << " ms, fetch " << t.fetch_ms << " ms\n";
     } catch (const std::exception& e) {

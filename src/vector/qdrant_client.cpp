@@ -21,6 +21,11 @@ QdrantClient::QdrantClient(const std::string& base_url, int timeout_s)
 
 QdrantClient::~QdrantClient() = default;
 
+bool QdrantClient::ready() {
+    const auto res = http_->Get("/readyz");
+    return res && res->status == 200;
+}
+
 nlohmann::json QdrantClient::request(const std::string& method, const std::string& path,
                                      const nlohmann::json* body) {
     const std::string payload = body ? body->dump() : std::string();

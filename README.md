@@ -2,7 +2,20 @@
 
 A multimodal knowledge base for lecture material, written in C++20 for Linux.
 Slide decks are parsed, OCR'd and embedded; questions in English or Chinese are
-answered with citations down to the lecture and page.
+answered with citations down to the lecture and page, over HTTP, over MCP, or
+by a Claude agent that uses the MCP tools.
+
+Built on 613 slides of a university computer-security course (the slides are
+not in the repository), on a laptop CPU (AMD Ryzen 5 7535HS, no GPU).
+
+| | |
+|---|---|
+| OCR | PP-OCRv4 in C++: 95.3% recall of slide text, 1.7% median CER; reads code in screenshots the PDF text layer lacks (34 of 104 pages) |
+| Retrieval | Hybrid vector + full-text with RRF: Recall@5 76.7% vs 63.3% vector-only and 50.0% keyword-only, on 30 labeled queries (half in Chinese) |
+| Acceleration | Same ONNX models on ONNX Runtime or OpenVINO: OCR 2.1× / 2.4× faster on OpenVINO at identical accuracy; INT8 embeddings 4× smaller, 1.4× faster, with a measured recall cost |
+| Data | PostgreSQL is the source of truth; Qdrant is a derived index fed by a transactional outbox (at-least-once, idempotent, backoff, dead letter) |
+| Agent | MCP server and client written from the spec, both protocol eras (2026-07-28 and 2025-11-25); Claude tool-use loop over raw HTTPS |
+| Reliability | 17 failure drills (Qdrant or PostgreSQL stopped under load) pass; 49 unit tests, also under ASan + UBSan in CI |
 
 ```
 PDF ──► ll-ingest ──► PostgreSQL (documents, lectures, pages, chunks, outbox)
@@ -39,7 +52,6 @@ PDF ──► ll-ingest ──► PostgreSQL (documents, lectures, pages, chunks
 
 ```bash
 bash scripts/setup_wsl.sh        # once: compilers, libraries, Docker (asks for sudo)
-sudo apt-get install -y libsentencepiece-dev
 bash scripts/fetch_models.sh     # ONNX Runtime, OpenVINO, PP-OCRv4, multilingual-e5-small
 LL_CMAKE_ARGS=-DLL_ENABLE_OPENVINO=ON bash scripts/dev.sh test   # build + unit tests
 bash scripts/dev.sh ingest       # PostgreSQL + Qdrant up, migrate, ingest PDFs
@@ -66,6 +78,13 @@ curl -s -X POST localhost:8080/api/search -H 'Content-Type: application/json' \
   -d '{"query": "零知識證明是什麼", "top_k": 3}'
 ```
 
+Failure drills and a guided demo (services must be up, data indexed):
+
+```bash
+bash tests/e2e/failure_drills.sh
+bash scripts/demo.sh
+```
+
 Agent and MCP:
 
 ```bash
@@ -83,6 +102,29 @@ python3 -I tests/e2e/mcp_smoke.py ~/build/lecturelens/src/ll-mcp
 
 Course PDFs are copyrighted and are read from outside the repository
 (`LL_COURSE_DIR`); they are never committed.
+
+## Design decisions
+
+- **PostgreSQL first, Qdrant derived.** Every write (document, pages, chunks)
+  is one PostgreSQL transaction that also queues outbox events. The indexer
+  claims events with `FOR UPDATE SKIP LOCKED`, upserts with the chunk id as
+  the point id, and marks events done afterwards: a crash between the two
+  re-delivers, and the upsert is idempotent. Qdrant can be dropped and rebuilt
+  from PostgreSQL at any time.
+- **Degrade, don't fail.** Qdrant down: hybrid search answers keyword-only and
+  says so (`degraded` in the API, a note in the MCP tool result); `/health`
+  reports `degraded` with 200. PostgreSQL down: `/health` returns 503, and the
+  resident indexer backs off and resumes on its own.
+- **OCR only where it adds text.** Pages whose text layer is thin are OCR'd for
+  indexing. Evaluating OCR against the text layer with plain CER (37%) was
+  misleading because OCR also reads screenshots; recall plus CER on pages
+  without image text separates recognition quality from extra coverage.
+- **One model interface, several runtimes.** OCR and embedding code see only
+  `Model`; ONNX Runtime and OpenVINO implementations load the same `.onnx`
+  files, so backend comparisons change nothing but the runtime.
+- **Tool errors are for the model.** Bad arguments or a missing page come back
+  as MCP `isError` results that the agent passes to Claude to correct;
+  protocol errors are reserved for protocol problems.
 
 ## Results so far
 
@@ -162,6 +204,25 @@ Runtime (Recall@5 76.7%, MRR 0.589).
 
 **Indexing**: 1,930 outbox events → 708 vectors in 31 s.
 
+## Reliability
+
+`tests/e2e/failure_drills.sh` stops services under the running system
+(17 checks, all passing):
+
+| Drill | Expected and observed |
+|---|---|
+| Qdrant stopped, API running | `/health` 200 `degraded`; English queries return keyword results; Chinese queries return in under 100 ms instead of hanging; full results again once Qdrant is back, without restarting the API |
+| Qdrant fails while indexing | 20 events rescheduled with attempt count, backoff and the error kept; indexer keeps running; backlog drains on its own after recovery; Qdrant point count unchanged (idempotent re-delivery) |
+| Repeated failures | 8th failure moves events to the dead letter; they are not retried automatically; an operator `UPDATE` replays them |
+| PostgreSQL stopped | `/health` 503; search returns a JSON 500; the resident indexer backs off and processes new events after PostgreSQL returns; the API recovers without a restart |
+
+Unit tests (49: text processing, chunking, OCR decoding, RRF, pooling, MCP
+schema validation, both MCP eras, client fallback, the agent loop with a
+scripted model) run in GitHub Actions with and without AddressSanitizer +
+UBSan. The MCP end-to-end check and the retrieval eval were also run on a
+sanitizer build of the full system (ONNX Runtime, OpenVINO, PostgreSQL,
+Qdrant) with no reports.
+
 ## Agent and MCP
 
 `ll-mcp` exposes three read-only tools. Results carry both a readable text
@@ -199,6 +260,17 @@ of tools and system prompt, and `fallbacks: "default"` so a refused request is
 retried on a fallback model by the API (`--no-fallbacks` turns it off). The
 loop is tested with a scripted model; there is no official C++ SDK, so the
 client is raw HTTPS with retries on 408/409/429/5xx.
+
+## Limitations
+
+- The retrieval query set is small (30) and written by the author; treat the
+  numbers as indicative, not as a benchmark.
+- Benchmarks are from one AMD laptop CPU. OpenVINO's Intel-specific paths
+  (AMX, VNNI) and the CUDA / TensorRT backends are wired in but not measured.
+- Speech transcription (lecture recordings) is not implemented; there was no
+  recorded material to work with.
+- `ll-agent` has been tested with a scripted model; a run against the live
+  Claude API needs an API key.
 
 ## Known issues
 

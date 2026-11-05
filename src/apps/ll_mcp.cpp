@@ -59,10 +59,15 @@ ll::mcp::Tool search_tool(const std::string& dsn, const ll::embed::TextEmbedder&
         q.mode = ll::search::parse_mode(a.value("mode", std::string("hybrid")));
         if (a.contains("document_id")) q.document_id = a["document_id"].get<std::int64_t>();
         ll::search::HybridSearcher searcher(dsn, *emb, *qd);
-        const auto results = searcher.search(q);
+        ll::search::Timings timings;
+        const auto results = searcher.search(q, &timings);
 
         json items = json::array();
         std::ostringstream text;
+        if (!timings.vector_error.empty()) {
+            text << "(Semantic search is unavailable; these are keyword matches only, so questions not in "
+                    "English may miss.)\n\n";
+        }
         if (results.empty()) text << "No matching slides.";
         for (std::size_t i = 0; i < results.size(); ++i) {
             const auto& r = results[i];
@@ -73,7 +78,9 @@ ll::mcp::Tool search_tool(const std::string& dsn, const ll::embed::TextEmbedder&
                  << (r.source == "ocr" ? ", text read by OCR" : "") << ")\n"
                  << snip << "\n\n";
         }
-        return ll::mcp::ToolResult{{{"results", items}}, text.str()};
+        json structured = {{"results", items}};
+        if (!timings.vector_error.empty()) structured["degraded"] = {{"vector", timings.vector_error}};
+        return ll::mcp::ToolResult{structured, text.str()};
     };
     return t;
 }
@@ -164,7 +171,7 @@ int main(int argc, char** argv) {
     try {
         const auto dsn = ll::pg_dsn_from_env();
         const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", backend, 0, model_file);
-        ll::vec::QdrantClient qdrant(ll::vec::qdrant_url_from_env());
+        ll::vec::QdrantClient qdrant(ll::vec::qdrant_url_from_env(), 2);  // fail fast, then degrade
 
         ll::mcp::Server server({"lecturelens", "0.1.0"},
                                "Knowledge base of lecture slides for an advanced computer security course. "

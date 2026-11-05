@@ -44,19 +44,25 @@ std::vector<Result> HybridSearcher::search(const Query& q, Timings* timings) {
     std::vector<std::int64_t> vector_ids, keyword_ids;
 
     if (q.mode != Mode::Keyword) {
-        auto t0 = Clock::now();
-        const auto v = embedder_.embed_query(q.text);
-        t.embed_ms = ms_since(t0);
+        try {
+            auto t0 = Clock::now();
+            const auto v = embedder_.embed_query(q.text);
+            t.embed_ms = ms_since(t0);
 
-        t0 = Clock::now();
-        nlohmann::json filter = nullptr;
-        if (q.document_id) {
-            filter = {{"must", {{{"key", "document_id"}, {"match", {{"value", *q.document_id}}}}}}};
+            t0 = Clock::now();
+            nlohmann::json filter = nullptr;
+            if (q.document_id) {
+                filter = {{"must", {{{"key", "document_id"}, {"match", {{"value", *q.document_id}}}}}}};
+            }
+            for (const auto& h : qdrant_.search(index::kChunkCollection, v, q.candidates, filter)) {
+                vector_ids.push_back(h.id);
+            }
+            t.vector_ms = ms_since(t0);
+        } catch (const std::exception& e) {
+            if (q.mode == Mode::Vector) throw;  // nothing to fall back to
+            t.vector_error = e.what();
+            vector_ids.clear();
         }
-        for (const auto& h : qdrant_.search(index::kChunkCollection, v, q.candidates, filter)) {
-            vector_ids.push_back(h.id);
-        }
-        t.vector_ms = ms_since(t0);
     }
 
     pqxx::connection conn(dsn_);

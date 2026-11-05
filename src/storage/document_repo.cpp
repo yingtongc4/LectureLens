@@ -41,10 +41,12 @@ std::int64_t insert_lecture(pqxx::work& tx, std::int64_t document_id, int seq,
 std::int64_t insert_page(pqxx::work& tx, std::int64_t document_id, std::int64_t lecture_id,
                          int page_no, const std::string& text_layer, int visible_chars,
                          bool needs_ocr) {
+    // bool goes in as text: libpqxx's bool conversion hits the C++20 link
+    // problem noted in storage/ocr_repo.cpp (seen in sanitizer builds).
     return returning_id(tx.exec_params(
         "INSERT INTO pages (document_id, lecture_id, page_no, text_layer, visible_chars, needs_ocr) "
-        "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-        document_id, lecture_id, page_no, text_layer, visible_chars, needs_ocr));
+        "VALUES ($1, $2, $3, $4, $5, $6::boolean) RETURNING id",
+        document_id, lecture_id, page_no, text_layer, visible_chars, std::string(needs_ocr ? "true" : "false")));
 }
 
 std::int64_t insert_chunk(pqxx::work& tx, std::int64_t page_id, const std::string& source,

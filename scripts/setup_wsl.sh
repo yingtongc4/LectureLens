@@ -10,7 +10,7 @@ sudo apt-get install -y \
   libpqxx-dev libpq-dev postgresql-client \
   nlohmann-json3-dev libcpp-httplib-dev libcurl4-openssl-dev libssl-dev \
   libgtest-dev libgmock-dev libbenchmark-dev \
-  libopencv-dev \
+  libopencv-dev libsentencepiece-dev \
   python3-venv \
   docker.io docker-compose-v2
 

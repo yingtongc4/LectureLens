@@ -38,10 +38,16 @@ struct Result {
 
 struct Timings {
     double embed_ms = 0, vector_ms = 0, keyword_ms = 0, fetch_ms = 0;
+    // Set when hybrid search fell back to keyword-only because the vector
+    // side (embedding or Qdrant) failed.
+    std::string vector_error;
 };
 
 // Vector search in Qdrant + full-text search in PostgreSQL, fused with RRF,
 // then joined back to PostgreSQL for citations (deck, lecture, page).
+// PostgreSQL is the source of truth and is required; Qdrant is a derived
+// index, so in hybrid mode a Qdrant failure degrades to keyword-only results
+// (reported in Timings::vector_error) instead of failing the query.
 class HybridSearcher {
 public:
     HybridSearcher(std::string dsn, const embed::TextEmbedder& embedder, vec::QdrantClient& qdrant);

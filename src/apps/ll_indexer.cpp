@@ -4,6 +4,7 @@
 //
 // --once drains the backlog and exits; otherwise it polls every 2 s.
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -50,13 +51,32 @@ int main(int argc, char** argv) {
         const ll::embed::TextEmbedder embedder(models / "multilingual-e5-small", backend, threads, model_file);
         ll::vec::QdrantClient qdrant(ll::vec::qdrant_url_from_env());
         ll::index::OutboxIndexer indexer(opts, embedder, qdrant);
-        indexer.ensure_collection();
 
         int total = 0, upserted = 0, deleted = 0, failures = 0;
         double embed_ms = 0;
+        bool collection_ready = false;
+        int outage_s = 0;  // backoff while PostgreSQL (or Qdrant at startup) is unreachable
         const auto t0 = std::chrono::steady_clock::now();
         while (!g_stop) {
-            const auto r = indexer.run_batch();
+            ll::index::BatchResult r;
+            try {
+                if (!collection_ready) {
+                    indexer.ensure_collection();
+                    collection_ready = true;
+                }
+                r = indexer.run_batch();
+                outage_s = 0;
+            } catch (const std::exception& e) {
+                // Could not claim or reschedule events at all. Nothing is
+                // lost: they stay pending. Exit in --once mode, else retry.
+                if (once) throw;
+                outage_s = std::min(outage_s == 0 ? 1 : outage_s * 2, 30);
+                std::cerr << "\nindexer: " << e.what() << "; retrying in " << outage_s << " s\n";
+                for (int i = 0; i < outage_s * 10 && !g_stop; ++i) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+                continue;
+            }
             total += r.claimed;
             upserted += r.upserted;
             deleted += r.deleted;

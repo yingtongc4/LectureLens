@@ -46,6 +46,9 @@ public:
 
     std::int64_t count(const std::string& collection);
 
+    // GET /readyz; false on any error (never throws).
+    bool ready();
+
 private:
     nlohmann::json request(const std::string& method, const std::string& path, const nlohmann::json* body);
 

@@ -1,0 +1,31 @@
+# Unit tests on every push, plain and under AddressSanitizer + UBSan.
+# Model-dependent parts (ONNX Runtime, OpenVINO) need downloaded runtimes and
+# models, so CI builds without them; the core, MCP and agent code is covered.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitize: [OFF, ON]
+    name: unit tests (sanitizers ${{ matrix.sanitize }})
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libpoppler-cpp-dev libpqxx-dev libpq-dev libssl-dev nlohmann-json3-dev libgtest-dev
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DLL_ENABLE_ORT=OFF -DLL_SANITIZE=${{ matrix.sanitize }}
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

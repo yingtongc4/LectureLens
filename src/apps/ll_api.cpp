@@ -53,8 +53,20 @@ int main(int argc, char** argv) {
             reply_json(res, {{"error", msg}}, 500);
         });
 
-        server.Get("/health", [](const httplib::Request&, httplib::Response& res) {
-            reply_json(res, {{"status", "ok"}});
+        // PostgreSQL down = cannot serve (503); Qdrant down = degraded
+        // (keyword-only search), still 200.
+        server.Get("/health", [&](const httplib::Request&, httplib::Response& res) {
+            bool pg_ok = true;
+            try {
+                pqxx::connection conn(dsn);
+                pqxx::nontransaction(conn).exec("SELECT 1");
+            } catch (const std::exception&) {
+                pg_ok = false;
+            }
+            thread_local ll::vec::QdrantClient qdrant(qdrant_url, 2);
+            const bool qdrant_ok = qdrant.ready();
+            const char* status = !pg_ok ? "down" : qdrant_ok ? "ok" : "degraded";
+            reply_json(res, {{"status", status}, {"postgres", pg_ok}, {"qdrant", qdrant_ok}}, pg_ok ? 200 : 503);
         });
 
         server.Post("/api/search", [&](const httplib::Request& req, httplib::Response& res) {
@@ -70,7 +82,7 @@ int main(int argc, char** argv) {
 
             // httplib serves each request on a pool thread; give each its own
             // HTTP client (the embedder's ORT session is thread-safe).
-            thread_local ll::vec::QdrantClient qdrant(qdrant_url);
+            thread_local ll::vec::QdrantClient qdrant(qdrant_url, 2);  // fail fast, then degrade
             ll::search::HybridSearcher searcher(dsn, embedder, qdrant);
             ll::search::Timings t;
             const auto results = searcher.search(q, &t);
@@ -79,6 +91,7 @@ int main(int argc, char** argv) {
             for (const auto& r : results) out["results"].push_back(ll::search::to_json(r));
             out["timings_ms"] = {{"embed", t.embed_ms}, {"vector", t.vector_ms}, {"keyword", t.keyword_ms},
                                  {"fetch", t.fetch_ms}};
+            if (!t.vector_error.empty()) out["degraded"] = {{"vector", t.vector_error}};
             reply_json(res, out);
         });
 

@@ -1,5 +1,7 @@
 # LectureLens
 
+[![ci](https://github.com/yingtongc4/LectureLens/actions/workflows/ci.yml/badge.svg)](https://github.com/yingtongc4/LectureLens/actions/workflows/ci.yml)
+
 A multimodal knowledge base for lecture material, written in C++20 for Linux.
 Slide decks are parsed, OCR'd and embedded; questions in English or Chinese are
 answered with citations down to the lecture and page, over HTTP, over MCP, or
